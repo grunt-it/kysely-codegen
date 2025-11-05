@@ -2,7 +2,7 @@ export type ColumnMetadataOptions = {
   comment?: string | null;
   dataType: string;
   dataTypeSchema?: string;
-  enumValues?: string[] | null;
+  enumValues?: (string | number)[] | null;
   hasDefaultValue?: boolean;
   isArray?: boolean;
   isAutoIncrementing?: boolean;
@@ -14,7 +14,7 @@ export class ColumnMetadata {
   comment: string | null;
   dataType: string;
   dataTypeSchema: string | undefined;
-  enumValues: string[] | null;
+  enumValues: (string | number)[] | null;
   hasDefaultValue: boolean;
   isArray: boolean;
   isAutoIncrementing: boolean;

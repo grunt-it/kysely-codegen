@@ -4,7 +4,7 @@ import { SymbolCollection } from '../transformer/symbol-collection';
 import { IdentifierNode } from './identifier-node';
 import { LiteralNode } from './literal-node';
 
-type RuntimeEnumMember = [key: string, value: LiteralNode<string>];
+type RuntimeEnumMember = [key: string, value: LiteralNode];
 
 export class RuntimeEnumDeclarationNode {
   readonly members: RuntimeEnumMember[];
@@ -13,7 +13,7 @@ export class RuntimeEnumDeclarationNode {
 
   constructor(
     name: string,
-    literals: string[],
+    literals: (string | number)[],
     options?: { identifierStyle?: IdentifierStyle },
   ) {
     this.members = [];
@@ -22,7 +22,7 @@ export class RuntimeEnumDeclarationNode {
     const symbolCollection = new SymbolCollection({
       entries: literals.map(
         (literal): SymbolEntry => [
-          literal,
+          String(literal), // Convert to string for the identifier key
           { node: new LiteralNode(literal), type: 'RuntimeEnumMember' },
         ],
       ),

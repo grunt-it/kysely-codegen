@@ -392,7 +392,7 @@ const transformColumnToArgs = (
   return [context.defaultScalar];
 };
 
-const transformEnum = (enumValues: string[]) => {
+const transformEnum = (enumValues: (string | number)[]) => {
   return enumValues.map((enumValue) => new LiteralNode(enumValue));
 };
 

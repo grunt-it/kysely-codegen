@@ -126,4 +126,143 @@ describe('SqliteIntrospector', () => {
 
     await db.destroy();
   });
+
+  it('should parse numeric literals for INTEGER columns', async () => {
+    const db = new Kysely({
+      dialect: new SqliteDialect({
+        database: new Database(':memory:'),
+      }),
+    });
+
+    await sql`
+      CREATE TABLE test_table (
+        id INTEGER PRIMARY KEY,
+        has_overlay INTEGER CHECK (has_overlay IN (0, 1)),
+        priority INTEGER CHECK (priority IN (1, 2, 3))
+      )
+    `.execute(db);
+
+    const introspector = new SqliteIntrospector();
+    const metadata = await introspector.introspect({ db });
+
+    const table = metadata.tables.find((t) => t.name === 'test_table');
+    expect(table).toBeDefined();
+
+    const hasOverlayColumn = table?.columns.find(
+      (c) => c.name === 'has_overlay',
+    );
+    expect(hasOverlayColumn?.enumValues).toEqual([0, 1]);
+    expect(typeof hasOverlayColumn?.enumValues?.[0]).toBe('number');
+
+    const priorityColumn = table?.columns.find((c) => c.name === 'priority');
+    expect(priorityColumn?.enumValues).toEqual([1, 2, 3]);
+    expect(typeof priorityColumn?.enumValues?.[0]).toBe('number');
+
+    await db.destroy();
+  });
+
+  it('should parse numeric literals for REAL columns', async () => {
+    const db = new Kysely({
+      dialect: new SqliteDialect({
+        database: new Database(':memory:'),
+      }),
+    });
+
+    await sql`
+      CREATE TABLE test_table (
+        id INTEGER PRIMARY KEY,
+        priority REAL CHECK (priority IN (1, 2.5, 5))
+      )
+    `.execute(db);
+
+    const introspector = new SqliteIntrospector();
+    const metadata = await introspector.introspect({ db });
+
+    const table = metadata.tables.find((t) => t.name === 'test_table');
+    expect(table).toBeDefined();
+
+    const priorityColumn = table?.columns.find((c) => c.name === 'priority');
+    expect(priorityColumn?.enumValues).toEqual([1, 2.5, 5]);
+    expect(typeof priorityColumn?.enumValues?.[0]).toBe('number');
+
+    await db.destroy();
+  });
+
+  it('should parse string literals for TEXT columns', async () => {
+    const db = new Kysely({
+      dialect: new SqliteDialect({
+        database: new Database(':memory:'),
+      }),
+    });
+
+    await sql`
+      CREATE TABLE test_table (
+        id INTEGER PRIMARY KEY,
+        type TEXT CHECK (type IN ('video', 'photo'))
+      )
+    `.execute(db);
+
+    const introspector = new SqliteIntrospector();
+    const metadata = await introspector.introspect({ db });
+
+    const table = metadata.tables.find((t) => t.name === 'test_table');
+    expect(table).toBeDefined();
+
+    const typeColumn = table?.columns.find((c) => c.name === 'type');
+    expect(typeColumn?.enumValues).toEqual(['photo', 'video']); // sorted
+    expect(typeof typeColumn?.enumValues?.[0]).toBe('string');
+
+    await db.destroy();
+  });
+
+  it('should handle Kysely schema builder with quoted identifiers', async () => {
+    const db = new Kysely({
+      dialect: new SqliteDialect({
+        database: new Database(':memory:'),
+      }),
+    });
+
+    // Use Kysely's schema builder (which quotes identifiers)
+    await db.schema
+      .createTable('test_table')
+      .addColumn('id', 'integer', (col) => col.primaryKey())
+      .addColumn('with_overlay', 'integer', (col) =>
+        col
+          .notNull()
+          .defaultTo(0)
+          .check(sql`with_overlay IN (0, 1)`),
+      )
+      .addColumn('status', 'text', (col) =>
+        col.check(sql`status IN ('active', 'inactive')`),
+      )
+      .addColumn('priority', 'real', (col) =>
+        col.check(sql`priority IN (1.0, 2.5, 5.0)`),
+      )
+      .execute();
+
+    const introspector = new SqliteIntrospector();
+    const metadata = await introspector.introspect({ db });
+
+    const table = metadata.tables.find((t) => t.name === 'test_table');
+    expect(table).toBeDefined();
+
+    // INTEGER column should have number literals
+    const withOverlayColumn = table?.columns.find(
+      (c) => c.name === 'with_overlay',
+    );
+    expect(withOverlayColumn?.enumValues).toEqual([0, 1]);
+    expect(typeof withOverlayColumn?.enumValues?.[0]).toBe('number');
+
+    // TEXT column should have string literals
+    const statusColumn = table?.columns.find((c) => c.name === 'status');
+    expect(statusColumn?.enumValues).toEqual(['active', 'inactive']); // sorted
+    expect(typeof statusColumn?.enumValues?.[0]).toBe('string');
+
+    // REAL column should have number literals
+    const priorityColumn = table?.columns.find((c) => c.name === 'priority');
+    expect(priorityColumn?.enumValues).toEqual([1, 2.5, 5]);
+    expect(typeof priorityColumn?.enumValues?.[0]).toBe('number');
+
+    await db.destroy();
+  });
 });

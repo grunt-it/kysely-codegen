@@ -8,8 +8,9 @@ import { DatabaseMetadata } from '../../metadata/database-metadata';
 class CheckConstraintParser {
   static parseEnumConstraints(
     sql: string,
-  ): { column: string; values: string[] }[] {
-    const constraints: { column: string; values: string[] }[] = [];
+    columnTypes: Map<string, string>,
+  ): { column: string; values: (string | number)[] }[] {
+    const constraints: { column: string; values: (string | number)[] }[] = [];
 
     // Normalize the SQL by removing extra whitespace and converting to lowercase for parsing
     const normalizedSql = sql.replaceAll(/\s+/g, ' ').toLowerCase();
@@ -35,7 +36,10 @@ class CheckConstraintParser {
       }
 
       // Parse the constraint content for IN clauses
-      const enumConstraint = this.parseInConstraint(constraintContent);
+      const enumConstraint = this.parseInConstraint(
+        constraintContent,
+        columnTypes,
+      );
       if (enumConstraint) {
         constraints.push(enumConstraint);
       }
@@ -73,7 +77,8 @@ class CheckConstraintParser {
 
   private static parseInConstraint(
     constraintContent: string,
-  ): { column: string; values: string[] } | null {
+    columnTypes: Map<string, string>,
+  ): { column: string; values: (string | number)[] } | null {
     // Look for pattern: column_name IN (value1, value2, ...)
     const inMatch = constraintContent.match(
       /^\s*([A-Z_a-z]\w*)\s+in\s*\(\s*(.+?)\s*\)\s*$/,
@@ -83,14 +88,24 @@ class CheckConstraintParser {
     const columnName = inMatch[1];
     const valuesString = inMatch[2];
 
+    // Get the column type to determine how to parse values
+    const columnType = columnTypes.get(columnName);
+    const isNumericType =
+      columnType === 'INTEGER' ||
+      columnType === 'REAL' ||
+      columnType === 'NUMERIC';
+
     // Parse the comma-separated values
-    const values = this.parseValueList(valuesString);
+    const values = this.parseValueList(valuesString, isNumericType);
 
     return values.length > 0 ? { column: columnName, values } : null;
   }
 
-  private static parseValueList(valuesString: string): string[] {
-    const values: string[] = [];
+  private static parseValueList(
+    valuesString: string,
+    isNumericType: boolean,
+  ): (string | number)[] {
+    const values: (string | number)[] = [];
     let currentValue = '';
     let inQuotes = false;
     let quoteChar = '';
@@ -112,7 +127,15 @@ class CheckConstraintParser {
         }
       } else if (!inQuotes && char === ',') {
         const trimmed = currentValue.trim();
-        if (trimmed) values.push(trimmed);
+        if (trimmed) {
+          // For numeric types, convert unquoted values to numbers
+          if (isNumericType) {
+            const numValue = Number(trimmed);
+            values.push(Number.isNaN(numValue) ? trimmed : numValue);
+          } else {
+            values.push(trimmed);
+          }
+        }
         currentValue = '';
       } else {
         currentValue += char;
@@ -121,7 +144,15 @@ class CheckConstraintParser {
 
     // Add the last value
     const trimmed = currentValue.trim();
-    if (trimmed) values.push(trimmed);
+    if (trimmed) {
+      // For numeric types, convert unquoted values to numbers
+      if (isNumericType) {
+        const numValue = Number(trimmed);
+        values.push(Number.isNaN(numValue) ? trimmed : numValue);
+      } else {
+        values.push(trimmed);
+      }
+    }
 
     return values;
   }
@@ -170,17 +201,49 @@ export class SqliteIntrospector extends Introspector<any> {
     for (const row of rows) {
       if (!row.sql) continue;
 
+      // Get column types from PRAGMA table_info instead of parsing SQL
+      const columnTypes = await this.getColumnTypes(db, row.name);
+
       // Parse CHECK constraints from the CREATE TABLE statement
-      const constraints = CheckConstraintParser.parseEnumConstraints(row.sql);
+      const constraints = CheckConstraintParser.parseEnumConstraints(
+        row.sql,
+        columnTypes,
+      );
 
       for (const constraint of constraints) {
         const key = `${row.name}.${constraint.column}`;
         // Sort the enum values for consistency
-        const sortedValues = [...constraint.values].sort();
+        const sortedValues = [...constraint.values].sort((a, b) => {
+          if (typeof a === 'string' && typeof b === 'string') {
+            return a.localeCompare(b);
+          }
+          return a < b ? -1 : a > b ? 1 : 0;
+        });
         enums.set(key, sortedValues);
       }
     }
 
     return enums;
+  }
+
+  private async getColumnTypes(
+    db: any,
+    tableName: string,
+  ): Promise<Map<string, string>> {
+    const columnTypes = new Map<string, string>();
+
+    // Use PRAGMA table_info to get reliable column type information
+    const { sql } = await import('kysely');
+    const result = await sql`PRAGMA table_info(${sql.ref(tableName)})`.execute(
+      db.withoutPlugins(),
+    );
+
+    for (const column of result.rows as any[]) {
+      if (column.name && column.type) {
+        columnTypes.set(column.name.toLowerCase(), column.type.toUpperCase());
+      }
+    }
+
+    return columnTypes;
   }
 }

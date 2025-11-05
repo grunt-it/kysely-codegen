@@ -19,7 +19,7 @@ export type SymbolNode =
   | { node: ExpressionNode | TemplateNode; type: 'Definition' }
   | { node: ModuleReferenceNode; type: 'ModuleReference' }
   | { node: RuntimeEnumDeclarationNode; type: 'RuntimeEnumDefinition' }
-  | { node: LiteralNode<string>; type: 'RuntimeEnumMember' }
+  | { node: LiteralNode; type: 'RuntimeEnumMember' }
   | { type: 'Table' };
 
 export type SymbolType =

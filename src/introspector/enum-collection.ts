@@ -1,4 +1,4 @@
-type EnumMap = Record<string, string[] | undefined>;
+type EnumMap = Record<string, (string | number)[] | undefined>;
 
 export class EnumCollection {
   readonly enums: EnumMap = {};
@@ -11,13 +11,20 @@ export class EnumCollection {
     );
   }
 
-  add(key: string, value: string) {
+  add(key: string, value: string | number) {
     (this.enums[key.toLowerCase()] ??= []).push(value);
   }
 
   get(key: string) {
     return (
-      this.enums[key.toLowerCase()]?.sort((a, b) => a.localeCompare(b)) ?? null
+      this.enums[key.toLowerCase()]?.sort((a, b) => {
+        // Handle mixed types by converting to strings for comparison
+        if (typeof a === 'string' && typeof b === 'string') {
+          return a.localeCompare(b);
+        }
+        // For numbers or mixed types, use standard comparison
+        return a < b ? -1 : a > b ? 1 : 0;
+      }) ?? null
     );
   }
 
@@ -25,7 +32,7 @@ export class EnumCollection {
     return !!this.enums[key.toLowerCase()];
   }
 
-  set(key: string, values: string[]) {
+  set(key: string, values: (string | number)[]) {
     this.enums[key.toLowerCase()] = values;
   }
 }
