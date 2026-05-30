@@ -1,21 +1,27 @@
 {
-  "name": "@terrxo/kysely-codegen",
-  "version": "0.18.8",
+  "name": "@grunt-it/kysely-codegen",
+  "version": "1.0.0",
   "author": "Robin Blomberg",
+  "contributors": [
+    "grunt-it <https://github.com/grunt-it>"
+  ],
   "license": "MIT",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
     "kysely-codegen": "./dist/cli/bin.js"
   },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RobinBlomberg/kysely-codegen.git"
+    "url": "git+https://github.com/grunt-it/kysely-codegen.git"
   },
   "bugs": {
-    "url": "https://github.com/RobinBlomberg/kysely-codegen/issues"
+    "url": "https://github.com/grunt-it/kysely-codegen/issues"
   },
-  "homepage": "https://github.com/RobinBlomberg/kysely-codegen#readme",
+  "homepage": "https://github.com/grunt-it/kysely-codegen#readme",
   "scripts": {
     "build": "rimraf dist && tsc --project ./tsconfig.build.json",
     "check:types": "tsc --noEmit",
@@ -35,7 +41,7 @@
     "lint": "run-p lint:*",
     "lint:eslint": "eslint src",
     "lint:prettier": "prettier --check src",
-    "prepublishOnly": "pnpm run ci",
+    "prepublishOnly": "pnpm run build",
     "start": "pnpm build && DATABASE_URL=postgres://user:password@localhost:5433/database node ./dist/cli/bin.js",
     "test": "vitest run --globals --fileParallelism=false --maxConcurrency=1 --maxWorkers=1 --sequence.seed=1",
     "test:watch": "vitest watch --globals --fileParallelism=false --maxConcurrency=1 --maxWorkers=1 --sequence.seed=1",

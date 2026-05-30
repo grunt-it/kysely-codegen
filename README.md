@@ -2,6 +2,18 @@
 
 `kysely-codegen` generates Kysely type definitions from your database. That's it.
 
+> **`@grunt-it/kysely-codegen`** — a fork of [RobinBlomberg/kysely-codegen](https://github.com/RobinBlomberg/kysely-codegen) (MIT, © Robin Blomberg), maintained by [grunt-it](https://github.com/grunt-it). Published to **GitHub Packages** (`https://npm.pkg.github.com`). Install with the `@grunt-it` scope authenticated (`bunfig.toml`/`.npmrc` with a `read:packages` token, or `gh auth` on dev machines):
+> ```sh
+> bun add -d @grunt-it/kysely-codegen   # or npm i -D @grunt-it/kysely-codegen
+> ```
+>
+> ### grunt-it fork deltas (vs upstream)
+> - **CHECK-constraint introspection → literal unions** (Postgres + **SQLite/D1**): columns with `CHECK (col IN ('a','b'))` are emitted as `'a' | 'b'` literal-union types instead of a bare `string`. The SQLite path makes this work for Cloudflare D1.
+> - **Mixed-type enum handling** in introspection (numeric + string members).
+> - Kysely 0.28 support, exported config types, circular-import fix.
+>
+> **Tooling note:** this fork keeps **pnpm** (deliberate exception to grunt-it's bun-everywhere convention, to minimize drift from upstream). All other `@grunt-it/*` packages use bun.
+
 ## Table of contents <!-- omit from toc -->
 
 - [Installation](#installation)
