@@ -46,11 +46,13 @@ export class PostgresIntrospector extends Introspector<PostgresDB> {
   }
 
   createDatabaseMetadata({
+    checkConstraints,
     domains,
     enums,
     partitions,
     tables: rawTables,
   }: {
+    checkConstraints: Map<string, Map<string, string[]>>;
     domains: PostgresDomainInspector[];
     enums: EnumCollection;
     partitions: TableReference[];
@@ -58,11 +60,13 @@ export class PostgresIntrospector extends Introspector<PostgresDB> {
   }) {
     const tables = rawTables
       .map((table): TableMetadata => {
+        const tableChecks = checkConstraints.get(table.name) ?? new Map();
         const columns = table.columns.map((column): ColumnMetadata => {
           const dataType = this.getRootType(column, domains);
-          const enumValues = enums.get(
-            `${column.dataTypeSchema ?? this.options.defaultSchemas}.${dataType}`,
-          );
+          const enumValues =
+            enums.get(
+              `${column.dataTypeSchema ?? this.options.defaultSchemas}.${dataType}`,
+            ) ?? tableChecks.get(column.name) ?? null;
           const isArray = dataType.startsWith('_');
 
           return {
@@ -115,13 +119,14 @@ export class PostgresIntrospector extends Introspector<PostgresDB> {
   async introspect(options: IntrospectOptions<PostgresDB>) {
     const tables = await this.getTables(options);
 
-    const [domains, enums, partitions] = await Promise.all([
+    const [domains, enums, partitions, checkConstraints] = await Promise.all([
       this.introspectDomains(options.db),
       this.introspectEnums(options.db),
       this.introspectPartitions(options.db),
+      this.introspectCheckConstraints(options.db),
     ]);
 
-    return this.createDatabaseMetadata({ enums, domains, partitions, tables });
+    return this.createDatabaseMetadata({ checkConstraints, enums, domains, partitions, tables });
   }
 
   async introspectDomains(db: Kysely<PostgresDB>) {
@@ -180,6 +185,54 @@ export class PostgresIntrospector extends Introspector<PostgresDB> {
     }
 
     return enums;
+  }
+
+  async introspectCheckConstraints(
+    db: Kysely<PostgresDB>,
+  ): Promise<Map<string, Map<string, string[]>>> {
+    const result = await sql<{
+      tableName: string;
+      columnName: string;
+      values: string;
+    }>`
+      select
+        c.relname as "tableName",
+        a.attname as "columnName",
+        pg_get_constraintdef(con.oid) as "values"
+      from pg_constraint con
+      join pg_class c on c.oid = con.conrelid
+      join pg_namespace n on n.oid = c.relnamespace
+      join lateral unnest(con.conkey) with ordinality as u(attnum, ord) on true
+      join pg_attribute a on a.attrelid = c.oid and a.attnum = u.attnum
+      where con.contype = 'c'
+        and n.nspname = any(current_schemas(true))
+        and pg_get_constraintdef(con.oid) ~ 'ANY\\s*\\(\\s*ARRAY\\s*\\['
+    `.execute(db);
+
+    const constraints = new Map<string, Map<string, string[]>>();
+
+    for (const row of result.rows) {
+      const match = row.values.match(
+        /ANY\s*\(\s*ARRAY\s*\[([^\]]+)\]/i,
+      );
+      if (!match) continue;
+
+      const values = match[1]!
+        .split(',')
+        .map((v) => v.trim().replace(/^'(.*)'(::\w+)?$/, '$1'))
+        .filter((v) => v.length > 0);
+
+      if (values.length === 0) continue;
+
+      let tableConstraints = constraints.get(row.tableName);
+      if (!tableConstraints) {
+        tableConstraints = new Map();
+        constraints.set(row.tableName, tableConstraints);
+      }
+      tableConstraints.set(row.columnName, values);
+    }
+
+    return constraints;
   }
 
   async introspectPartitions(db: Kysely<PostgresDB>) {

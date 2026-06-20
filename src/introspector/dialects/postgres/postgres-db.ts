@@ -3,6 +3,12 @@ export type PostgresDB = {
     nspname: string;
     oid: number;
   };
+  pg_constraint: {
+    conrelid: number;
+    conname: string;
+    contype: string;
+    pg_get_constraintdef: string;
+  };
   pg_enum: {
     enumlabel: string;
     enumtypid: number;
